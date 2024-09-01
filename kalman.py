@@ -69,8 +69,8 @@ def calc_return(df):
 
     df["long_ret"] = 0.
     pos = 0
-    for i, (entry, close, ret) in enumerate(zip(df["long_entry"], df["long_close"], df["log_price"])):
-        df.loc[i,"long_ret"] = ret*pos
+    for i, (idx, entry, close, ret) in enumerate(zip(df.index, df["long_entry"], df["long_close"], df["log_price"])):
+        df.loc[idx,"long_ret"] = ret*pos
         if entry:
             pos += 1
         if close:
@@ -79,8 +79,8 @@ def calc_return(df):
 
     df["short_ret"] = 0.
     pos = 0
-    for i, (entry, close, ret) in enumerate(zip(df["short_entry"], df["short_close"], df["log_price"])):
-        df.loc[i,"short_ret"] = -ret*pos
+    for i, (idx, entry, close, ret) in enumerate(zip(df.index, df["short_entry"], df["short_close"], df["log_price"])):
+        df.loc[idx,"short_ret"] = -ret*pos
         if entry:
             pos += 1
         if close:
