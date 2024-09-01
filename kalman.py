@@ -100,4 +100,35 @@ def calc_return(df):
 
     df["both_ret"] = df["short_ret"] + df["long_ret"]
 
-    return df    
+    return df
+
+def calc_base_return(df):
+    df["cci"] = (df["log_price"] - df["log_price"].rolling(30).mean())/(df["log_price"].rolling(30).std())
+    df["long_entry"] = (df["cci"] < -2)
+    df["short_entry"] = (df["cci"] > 2)
+
+    df["long_close"] = (df["cci"] > 1)
+    df["short_close"] = (df["cci"] < -1)
+
+    df["long_ret"] = 0.
+    pos = 0
+    for i, (idx, entry, close, ret) in enumerate(zip(df.index, df["long_entry"], df["long_close"], df["log_price"].diff().fillna(0))):
+        df.loc[idx,"long_ret"] = ret*pos
+        if entry:
+            pos += 1
+        if close:
+            pos = 0
+
+
+    df["short_ret"] = 0.
+    pos = 0
+    for i, (idx, entry, close, ret) in enumerate(zip(df.index, df["short_entry"], df["short_close"], df["log_price"].diff().fillna(0))):
+        df.loc[idx,"short_ret"] = -ret*pos
+        if entry:
+            pos += 1
+        if close:
+            pos = 0
+
+    df["both_ret"] = df["short_ret"] + df["long_ret"]
+
+    return df
