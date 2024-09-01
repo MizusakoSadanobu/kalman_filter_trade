@@ -5,14 +5,15 @@ from pykalman import KalmanFilter
 
 def data_gen(a, su, sw, T, show_graph):
     # ノイズ生成
+    log_price = np.zeros(T)
     u = np.random.normal(0, su, T)
-    u[1:] = a * u[:-1] + np.random.normal(0, su, T - 1)
+    for t in range(T):
+        if t<=100:
+            log_price[t] = 1000
+        else:
+            log_price[t] = (log_price[t-1]-log_price[t-2])*a + log_price[t-1] + u[t]
     w = np.random.normal(0, sw, T)
-    w[1:] = w[:-1] + np.random.normal(0, sw, T - 1)
-
-    # トレンドと対数価格の生成
-    trend = np.cumsum(w)
-    log_price = np.cumsum(trend + u)
+    log_price = log_price + w
 
     # DataFrameに変換
     df = pd.DataFrame({'log_price': log_price})
@@ -21,7 +22,7 @@ def data_gen(a, su, sw, T, show_graph):
         plt.show()
     return df
 
-def pred_confidence_interval(kf, df):
+def pred_confidence_interval(df, su, sw):
     """
     kalmanフィルタによる信頼区間を求める
     """
@@ -30,20 +31,31 @@ def pred_confidence_interval(kf, df):
     lower60s = []
     upper60s = []
     trends = []
+
+    # モデル初期化
+    state_means = [0, 0]
+    state_covs = [[1, 0], [0, 1]]
+    kf = KalmanFilter(transition_matrices=[[1, 1], [0, 1]],
+                    observation_matrices=[[1, 0]],
+                    initial_state_mean=state_means,
+                    initial_state_covariance=state_covs,
+                    observation_covariance=su,
+                    transition_covariance=[[0, 0], [0, sw]])
+    
     for i in range(len(df)):
         # カルマンフィルタの更新（i時刻までのデータでフィルタリング）
-        window = 50
-        state_means, state_covs = (
-            kf.filter(df['log_price'].values[:i+1])
-            if i<window else kf.filter(df['log_price'].values[i-window:i+1])
+        state_means, state_covs = kf.filter_update(
+            filtered_state_mean = state_means,
+            filtered_state_covariance = state_covs,
+            observation = [df['log_price'].values[i]],
         )
-        trends.append(state_means[-1,1])
+        trends.append(state_means[1])
         
         # 信頼区間の計算
-        lower95 = state_means[-1, 0] - 0.1 * np.sqrt(state_covs[-1, 0, 0])
-        upper95 = state_means[-1, 0] + 0.1 * np.sqrt(state_covs[-1, 0, 0])
-        lower60 = state_means[-1, 0] - 0. * np.sqrt(state_covs[-1, 0, 0])
-        upper60 = state_means[-1, 0] + 0. * np.sqrt(state_covs[-1, 0, 0])
+        lower95 = state_means[0] - 2 * np.sqrt(state_covs[0, 0]+sw)
+        upper95 = state_means[0] + 2 * np.sqrt(state_covs[0, 0]+sw)
+        lower60 = state_means[0] - 0.5 * np.sqrt(state_covs[0, 0]+sw)
+        upper60 = state_means[0] + 0.5 * np.sqrt(state_covs[0, 0]+sw)
 
         lower95s.append(lower95)
         upper95s.append(upper95)
@@ -69,7 +81,7 @@ def calc_return(df):
 
     df["long_ret"] = 0.
     pos = 0
-    for i, (idx, entry, close, ret) in enumerate(zip(df.index, df["long_entry"], df["long_close"], df["log_price"])):
+    for i, (idx, entry, close, ret) in enumerate(zip(df.index, df["long_entry"], df["long_close"], df["log_price"].diff().fillna(0))):
         df.loc[idx,"long_ret"] = ret*pos
         if entry:
             pos += 1
@@ -79,7 +91,7 @@ def calc_return(df):
 
     df["short_ret"] = 0.
     pos = 0
-    for i, (idx, entry, close, ret) in enumerate(zip(df.index, df["short_entry"], df["short_close"], df["log_price"])):
+    for i, (idx, entry, close, ret) in enumerate(zip(df.index, df["short_entry"], df["short_close"], df["log_price"].diff().fillna(0))):
         df.loc[idx,"short_ret"] = -ret*pos
         if entry:
             pos += 1
